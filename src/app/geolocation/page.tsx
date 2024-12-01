@@ -1,12 +1,28 @@
 "use client";
 
-import { useEffect, useState } from 'react';
-import { GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
+import { useEffect, useState, useCallback } from 'react';
+import { useJsApiLoader } from '@react-google-maps/api';
+import Image from 'next/image';
+import dynamic from 'next/dynamic';
 
-// 画面サイズに応じてマップのコンテナスタイルを調整
+const GoogleMap = dynamic(
+  () => import('@react-google-maps/api').then((mod) => mod.GoogleMap) as Promise<React.ComponentType<any>>,
+  {
+    loading: () => <p>Loading Map...</p>,
+    ssr: false,
+  }
+);
+
+const MarkerF = dynamic(
+  () => import('@react-google-maps/api').then((mod) => mod.MarkerF) as Promise<React.ComponentType<any>>,
+  {
+    ssr: false,
+  }
+);
+
 const containerStyle = {
   width: '100%',
-  height: '35vh',  // ビューポートの35%の高さ
+  height: '35vh',
   maxHeight: '300px'
 };
 
@@ -17,10 +33,24 @@ interface Location {
 }
 
 const MapComponent = () => {
+  const { isLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: "AIzaSyAwtAOf8BXODVdePgqQ1btcObi2Wc8ecHc"
+  });
+
+  const [map, setMap] = useState<google.maps.Map | null>(null);
   const [position, setPosition] = useState({
     lat: 35.6812,
     lng: 139.7671
   });
+
+  const onLoad = useCallback(function callback(map: google.maps.Map) {
+    setMap(map);
+  }, []);
+
+  const onUnmount = useCallback(function callback(map: google.maps.Map) {
+    setMap(null);
+  }, []);
 
   const [locations] = useState<Location[]>([
     {
@@ -56,9 +86,28 @@ const MapComponent = () => {
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
+  const renderMap = () => {
+    return (
+      <GoogleMap
+        mapContainerStyle={containerStyle}
+        center={position}
+        zoom={15}
+        onLoad={onLoad}
+        onUnmount={onUnmount}
+        options={{
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false,
+          zoomControl: true,
+        }}
+      >
+        <MarkerF position={position} />
+      </GoogleMap>
+    );
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-black text-white">
-      {/* ヘッダー - レスポンシブパディング */}
       <header className="px-4 py-3 sm:px-6">
         <h1 className="text-lg sm:text-xl font-semibold mb-3">
           町田GIONスタジアム 周辺情報
@@ -70,36 +119,23 @@ const MapComponent = () => {
         </div>
       </header>
 
-      {/* メインコンテンツ - スクロール可能エリア */}
       <div className="flex-1 overflow-auto">
         <div className="h-[35vh] max-h-[300px]">
-          <LoadScript googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}>
-            <GoogleMap
-              mapContainerStyle={containerStyle}
-              center={position}
-              zoom={15}
-              options={{
-                mapTypeControl: false,
-                streetViewControl: false,
-                fullscreenControl: false,
-                zoomControl: true,
-              }}
-            >
-              <Marker position={position} />
-            </GoogleMap>
-          </LoadScript>
+          {isLoaded ? renderMap() : <div>Loading...</div>}
         </div>
 
-        {/* 場所リスト - レスポンシブグリッド */}
         <div className="bg-gray-200 p-4 sm:p-6 rounded-t-lg mt-2">
           {locations.map((location, index) => (
             <div key={index} className="mb-4 flex items-start">
-              <img 
-                src={location.image} 
-                alt={location.name}
-                className="w-20 h-20 sm:w-24 sm:h-24 object-cover mr-3 sm:mr-4 rounded"
-              />
-              <div className="flex-1 min-w-0"> {/* テキストオーバーフロー防止 */}
+              <div className="relative w-20 h-20 sm:w-24 sm:h-24">
+                <Image 
+                  src={location.image} 
+                  alt={location.name}
+                  fill
+                  className="object-cover rounded"
+                />
+              </div>
+              <div className="flex-1 min-w-0 ml-3 sm:ml-4">
                 <h3 className="text-black font-bold text-sm sm:text-base">
                   {location.name}
                 </h3>
@@ -112,7 +148,6 @@ const MapComponent = () => {
         </div>
       </div>
 
-      {/* フッターナビゲーション - 固定位置 */}
       <footer className="flex justify-around items-center px-2 py-3 sm:px-4 sm:py-4 border-t border-gray-700 bg-black">
         <button className="text-gray-400 text-xs sm:text-sm flex flex-col items-center">
           <span>ホーム</span>
